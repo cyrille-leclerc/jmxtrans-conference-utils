@@ -23,6 +23,7 @@
  */
 package org.jmxtrans.samples.graphite;
 
+import org.apache.commons.io.output.TeeOutputStream;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartUtilities;
 import org.jfree.chart.JFreeChart;
@@ -35,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
@@ -53,7 +55,7 @@ public class LoadSimulator {
     protected final Logger logger = LoggerFactory.getLogger(getClass());
     private final Random random = new Random();
     private int graphitePort = 2003;
-    private String graphiteMetricPrefix = "servers.cloudbees.";
+    private String graphiteMetricPrefix = "servers.";
     private String graphiteHost = "localhost";
     private int[] weeklyDistribution = new int[8];
     private int[] hourlyDistribution = new int[24];
@@ -95,7 +97,10 @@ public class LoadSimulator {
     }
 
     public static void main(String[] args) throws Exception {
+        new File("/tmp/graphite.txt").delete();
         LoadSimulator loadSimulator = new LoadSimulator();
+        // loadSimulator.graphiteMetricPrefix = "e4f5b66f-a521-4cab-8d70-5b412056c973.servers.";
+        // loadSimulator.graphiteHost = "carbon.hostedgraphite.com";
         loadSimulator.generateLoad();
     }
 
@@ -104,11 +109,11 @@ public class LoadSimulator {
         TimeSeries timeSeries = new TimeSeries("shopping-cart.raw");
 
         DateTime now = new DateTime();
-        DateTime twelveDaysAgo = now.minusDays(12);
+        DateTime twelveDaysAgo = now.minusDays(1);
 
         int nowAsWeekOfYear = now.getWeekOfWeekyear();
 
-        DateTime date = now.minusDays(15);
+        DateTime date = now.minusDays(1);
 
         int integratedValue = 0;
 
@@ -214,14 +219,15 @@ public class LoadSimulator {
 
 
         Socket socket = new Socket(graphiteHost, graphitePort);
-        PrintWriter writer = new PrintWriter(socket.getOutputStream());
+        TeeOutputStream outputStream = new TeeOutputStream(socket.getOutputStream(), new FileOutputStream("/tmp/graphite.txt", true));
+        PrintWriter writer = new PrintWriter(outputStream);
 
         for (int i = 0; i < timeSeries.getItemCount(); i++) {
             logger.debug(sdf.format(timeSeries.getDataItem(i).getPeriod().getStart()) + "\t" + timeSeries.getDataItem(i).getValue().intValue());
             long time = TimeUnit.SECONDS.convert(timeSeries.getDataItem(i).getPeriod().getStart().getTime(), TimeUnit.MILLISECONDS);
             Number value = timeSeries.getDataItem(i).getValue();
 
-            writer.println(graphiteMetricPrefix + timeSeries.getKey() + " " + value + " " + time);
+            writer.println(graphiteMetricPrefix + timeSeries.getKey() + " " + value.intValue() + " " + time);
         }
         writer.flush();
         writer.close();
